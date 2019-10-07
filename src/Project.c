@@ -1,0 +1,332 @@
+#include <wiringPi.h>
+#include <wiringPiI2C.h>
+#include <wiringPiSPI.h>
+#include <stdio.h>   //For printf functions
+#include <stdlib.h>  //For system functions
+#include <signal.h>  //For cleanup fucntion
+#include <softPwm.h> //For PWM on seconds LED
+
+#include "Project.h"
+#include "CurrentTime.h"
+#include "mcp3004.h"
+
+//Global variables
+int bounce = 200; 					//Minimal interrpt interval (ms)
+long lastInterruptTime = 0; //Used for button debounce
+int RTC; 										//Holds the RTC instance
+int HH,MM,SS;
+
+void initGPIO(void){
+	/*
+	 * Sets GPIO using wiringPi pins. see pinout.xyz for specific wiringPi pins
+	 * You can also use "gpio readall" in the command line to get the pins
+	 * Note: wiringPi does not use GPIO or board pin numbers (unless specifically set to that mode)
+	 */
+	printf("Setting Up\n");
+	wiringPiSetup(); //This is the default mode. If you want to change pinouts, be aware
+
+	RTC = wiringPiI2CSetup(RTCAddr); //Set up the RTC
+
+	//Set up the LEDS
+	for(unsigned int i; i < sizeof(LEDS)/sizeof(LEDS[0]); i++){
+	    pinMode(LEDS[i], OUTPUT);
+	}
+
+	//Set Up the alarm LED for PWM
+	pinMode(ALARM_LED,OUTPUT);
+	softPwmCreate(ALARM_LED, 0, 60); //set SECONDS pin to support software PWM. Range of 0-60 (fully on)
+	printf("LEDS Done\n");
+
+	//Set up the Buttons
+	for(unsigned int j; j < sizeof(BTNS)/sizeof(BTNS[0]); j++){
+		pinMode(BTNS[j], INPUT);
+		pullUpDnControl(BTNS[j], PUD_UP);
+	}
+
+	//Attach interrupts to Buttons
+	wiringPiISR(RESET, INT_EDGE_FALLING, reset);
+	wiringPiISR(FREQUENCY, INT_EDGE_FALLING, changeFrequency);
+	wiringPiISR(ALARM_DISMISS, INT_EDGE_FALLING, dismissAlarm);
+	wiringPiISR(START, INT_EDGE_FALLING, monitoring);
+
+	printf("BTNS Done\n");
+	printf("Setup Done\n");
+}
+
+/*
+ * Method associated with RESET button interrpt
+ */
+void reset(void){
+	//Debounce
+	long interruptTime = millis();
+
+	if (interruptTime - lastInterruptTime>bounce){
+		printf("Reset Interrupt Triggered\n");
+		digitalWrite(RESET_LED, HIGH);
+		delay(1000);
+		digitalWrite(RESET_LED, LOW);
+
+	}
+	lastInterruptTime = interruptTime;
+}
+
+/*
+ * Method associated with FREQUENCY button interrpt
+ */
+void changeFrequency(void){
+	//Debounce
+	long interruptTime = millis();
+
+	if (interruptTime - lastInterruptTime>bounce){
+		printf("Frequency Interrupt Triggered\n");
+		digitalWrite(FREQUENCY_LED, HIGH);
+		delay(1000);
+		digitalWrite(FREQUENCY_LED, LOW);
+
+	}
+	lastInterruptTime = interruptTime;
+}
+
+/*
+ * Method associated with ALARM_DISMISS button interrpt
+ */
+void dismissAlarm(void){
+	//Debounce
+	long interruptTime = millis();
+
+	if (interruptTime - lastInterruptTime>bounce){
+		printf("Dismiss Alarm Interrupt Triggered\n");
+		digitalWrite(ALARM_DISMISS_LED, HIGH);
+		delay(1000);
+		digitalWrite(ALARM_DISMISS_LED, LOW);
+
+	}
+	lastInterruptTime = interruptTime;
+}
+
+/*
+ * Method associated with START button interrpt
+ */
+void monitoring(void){
+	//Debounce
+	long interruptTime = millis();
+
+	if (interruptTime - lastInterruptTime>bounce){
+		printf("Monitoring Interrupt Triggered\n");
+		digitalWrite(START_LED, HIGH);
+		delay(1000);
+		digitalWrite(START_LED, LOW);
+
+	}
+	lastInterruptTime = interruptTime;
+}
+
+/*
+ * The main function
+ * This function is called, and calls all relevant functions we've written
+ */
+int main(void){
+  signal(SIGINT, cleanup);
+
+	initGPIO();
+	//set the RTC registers with the current system time
+	setCurrentTime();
+
+	// Repeat this until we shut down
+for (;;){
+		//Fetch the time from the RTC
+		HH = wiringPiI2CReadReg8(RTC, HOUR); //read SEC register from RTC
+		MM = wiringPiI2CReadReg8(RTC, MIN); //read MIN register from RTC
+		SS = (wiringPiI2CReadReg8(RTC, SEC) & 0b01111111); //read the SEC register from RTC
+
+		secPWM(SS);
+
+		// Print out the time we have stored on our RTC
+		printf("The current time is: %d:%d:%d\n", hexCompensation(HH), hexCompensation(MM), hexCompensation(SS));
+
+		//Using a delay to make our program less CPU 'hungry'
+		delay(1000); //milliseconds
+	}
+	return 0;
+}
+
+/*
+ * myAnalogRead:
+ * Return the analog value of the given pin
+ *
+ */
+// static int myAnalogRead(struct wiringPiNodeStruct *node, int pin)
+// {
+//   unsigned char spiData [3] ;
+//   unsigned char chanBits ;
+//   int chan = pin - node->pinBase ;
+//
+//   chanBits = 0b10000000 | (chan << 4) ;
+//
+//   spiData [0] = 1 ;		// Start bit
+//   spiData [1] = chanBits ;
+//   spiData [2] = 0 ;
+//
+//   wiringPiSPIDataRW (node->fd, spiData, 3) ;
+//
+//   return ((spiData [1] << 8) | spiData [2]) & 0x3FF ;
+// }
+
+/*
+ * mcp3004Setup:
+ * Create a new wiringPi device node for an mcp3004 on the Pi's SPI interface.
+ */
+// int mcp3004Setup(const int pinBase, int spiChannel)
+// {
+//   struct wiringPiNodeStruct *node ;
+//
+//   if (wiringPiSPISetup (spiChannel, 1000000) < 0)
+//     return FALSE ;
+//
+//   node = wiringPiNewNode (pinBase, 8) ;
+//
+//   node->fd         = spiChannel ;
+//   node->analogRead = myAnalogRead ;
+//
+//   return TRUE ;
+// }
+
+/*
+ * Change the hour format to 12 hours
+ */
+int hFormat(int hours){
+	/*formats to 12h*/
+	if (hours >= 24){
+		hours = 0;
+	}
+	else if (hours > 12){
+		hours -= 12;
+	}
+	return (int)hours;
+}
+
+/*
+ * PWM on the ALARM LED
+ * The LED should have 60 brightness levels
+ * The LED should be "off" at 0 seconds, and fully bright at 59 seconds
+ */
+void secPWM(int units){
+	softPwmWrite(ALARM_LED, units);
+}
+
+/*
+ * hexCompensation
+ * This function may not be necessary if you use bit-shifting rather than decimal checking for writing out time values
+ */
+int hexCompensation(int units){
+	/*Convert HEX or BCD value to DEC where 0x45 == 0d45
+	  This was created as the lighXXX functions which determine what GPIO pin to set HIGH/LOW
+	  perform operations which work in base10 and not base16 (incorrect logic)
+	*/
+	int unitsU = units%0x10;
+
+	if (units >= 0x50){
+		units = 50 + unitsU;
+	}
+	else if (units >= 0x40){
+		units = 40 + unitsU;
+	}
+	else if (units >= 0x30){
+		units = 30 + unitsU;
+	}
+	else if (units >= 0x20){
+		units = 20 + unitsU;
+	}
+	else if (units >= 0x10){
+		units = 10 + unitsU;
+	}
+	return units;
+}
+
+/*
+ * decCompensation
+ * This function "undoes" hexCompensation in order to write the correct base 16 value through I2C
+ */
+int decCompensation(int units){
+	int unitsU = units%10;
+
+	if (units >= 50){
+		units = 0x50 + unitsU;
+	}
+	else if (units >= 40){
+		units = 0x40 + unitsU;
+	}
+	else if (units >= 30){
+		units = 0x30 + unitsU;
+	}
+	else if (units >= 20){
+		units = 0x20 + unitsU;
+	}
+	else if (units >= 10){
+		units = 0x10 + unitsU;
+	}
+	return units;
+}
+
+//This interrupt will fetch current time from another script and write it to the clock registers
+//This functions will toggle a flag that is checked in main
+void toggleTime(void){
+	long interruptTime = millis();
+
+	if (interruptTime - lastInterruptTime>bounce){
+		HH = getHours();
+		MM = getMins();
+		SS = getSecs();
+
+		HH = hFormat(HH);
+		HH = decCompensation(HH);
+		wiringPiI2CWriteReg8(RTC, HOUR, HH);
+
+		MM = decCompensation(MM);
+		wiringPiI2CWriteReg8(RTC, MIN, MM);
+
+		SS = decCompensation(SS);
+		wiringPiI2CWriteReg8(RTC, SEC, SS);
+
+	}
+	lastInterruptTime = interruptTime;
+}
+
+/*
+ * Reset GPIO pins
+ */
+void cleanup(int i){
+	// Set all outputs to LOW
+	for(unsigned int i=0 ; i<sizeof(LEDS)/sizeof(LEDS[0]); i++){
+		digitalWrite(LEDS[i], LOW);
+	}
+	// Set up each LED to Input (High Impedance)
+	for (unsigned int i=0 ; i<sizeof(LEDS)/sizeof(LEDS[0]); i++) {
+		pinMode(LEDS[i], INPUT);
+	}
+
+	pinMode(ALARM_LED, INPUT);
+
+	printf("Cleaning Up\n");
+	exit(0);
+}
+
+/*
+ * Gets current system time writes to RTC
+ */
+void setCurrentTime(void){ //
+	    HH = getHours();
+			MM = getMins();
+			SS = getSecs();
+
+			HH = hFormat(HH);
+			HH = decCompensation(HH);
+			wiringPiI2CWriteReg8(RTC, HOUR, HH);
+
+			MM = decCompensation(MM);
+			wiringPiI2CWriteReg8(RTC, MIN, MM);
+
+			SS = decCompensation(SS);
+			secPWM(SS);
+			wiringPiI2CWriteReg8(RTC, SEC,  0b10000000 + SS);
+}

@@ -22,10 +22,12 @@ int hours, mins, secs;
 int increment = 1000; //Default of 1 second
 int choice = 0;
 
-bool monitorConditions = true;
 bool dismissedAlarm = false;
+bool monitorConditions = true;
 
-long previousAlarmTime = millis(); //time that the previous alarm is sounded
+int prevAlarmHour = 0;
+int prevAlarmMin = 0;
+int prevAlarmSec = 0;
 
 void initGPIO(void){
 	/*
@@ -65,10 +67,7 @@ void initGPIO(void){
 	printf("BTNS Done\n");
 	printf("Setup Done\n");
 
-	printf("--------------------------------------------------------------------------------------------------\n");
-	printf("|   RTC Time   |   Sys Timer   |   Humidity (V)|   Temp (C) |  Light  |   DAC Out (V)|   Alarm   |\n");
-	printf("--------------------------------------------------------------------------------------------------\n");
-
+	printHeading();
 }
 
 /*
@@ -79,7 +78,7 @@ void reset(void){
 	long interruptTime = millis();
 
 	if (interruptTime - lastInterruptTime>bounce){
-		printf("Reset Interrupt Triggered\n");
+		//printf("Reset Interrupt Triggered\n");
 		digitalWrite(RESET_LED, HIGH);
 		delay(1000);
 		digitalWrite(RESET_LED, LOW);
@@ -87,6 +86,9 @@ void reset(void){
 		wiringPiI2CWriteReg8(RTC, HOUR, 0x0);
     wiringPiI2CWriteReg8(RTC, MIN, 0x0);
     wiringPiI2CWriteReg8(RTC, SEC, 0b10000000);
+
+		system("clear");
+		printHeading();
 
 	}
 	lastInterruptTime = interruptTime;
@@ -100,7 +102,7 @@ void changeFrequency(void){
 	long interruptTime = millis();
 
 	if (interruptTime - lastInterruptTime>bounce){
-		printf("Frequency Interrupt Triggered\n");
+		//printf("Frequency Interrupt Triggered\n");
 		digitalWrite(FREQUENCY_LED, HIGH);
 		delay(1000);
 		digitalWrite(FREQUENCY_LED, LOW);
@@ -130,7 +132,7 @@ void dismissAlarm(void){
 	long interruptTime = millis();
 
 	if (interruptTime - lastInterruptTime>bounce){
-		printf("Dismiss Alarm Interrupt Triggered\n");
+		//printf("Dismiss Alarm Interrupt Triggered\n");
 		digitalWrite(ALARM_DISMISS_LED, HIGH);
 		delay(1000);
 		digitalWrite(ALARM_DISMISS_LED, LOW);
@@ -149,7 +151,7 @@ void monitoring(void){
 	long interruptTime = millis();
 
 	if (interruptTime - lastInterruptTime>bounce){
-		printf("Monitoring Interrupt Triggered\n");
+		//printf("Monitoring Interrupt Triggered\n");
 		digitalWrite(START_LED, HIGH);
 		delay(1000);
 		digitalWrite(START_LED, LOW);
@@ -197,6 +199,7 @@ int main(void){
 }
 
 void *monitorThread(void *threadargs){
+
     for(;;){
 
 			while (!monitorConditions) continue;
@@ -209,9 +212,6 @@ void *monitorThread(void *threadargs){
 			hours = hexCompensation(HH);
 			mins = hexCompensation(MM);
 			secs = hexCompensation(SS & 0b01111111);
-
-			hours = hFormat(hours);
-      mins = mFormat(mins);
 
       string systemHour = to_string(hours);
       string systemMin = to_string(mins);
@@ -237,17 +237,18 @@ void *monitorThread(void *threadargs){
 
 			float dacOutput = (light / 1024.0) * humidity;
 
-			if(dacOutput < 0.65 || dacOutput > 2.65){
-				long currentAlarmTime = millis();
 
-				if((currentAlarmTime - previousAlarmTime>3000) || !dismissedAlarm){
+			if(checkAlarm(hours, mins, secs, prevAlarmHour, prevAlarmMin, prevAlarmSec)){
+
+				if(((dacOutput < 0.65 || dacOutput > 2.65)){
+					prevAlarmHour = hours;
+					prevAlarmMin = mins;
+					prevAlarmSec = secs;
+
 					secPWM(dacOutput);
 					printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, "*");
 				}
-				else {
-					secPWM(0);
-					printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, " ");
-				}
+
 			}
 			else{
 				secPWM(0);
@@ -259,6 +260,67 @@ void *monitorThread(void *threadargs){
 
 		}
     pthread_exit(NULL);
+}
+
+// void updateSystemTime(SS, MM, HH, ){
+//     int second1 = rtcTime[0];
+//     int minute1 = rtcTime[1];
+//     int hour1 = rtcTime[2];
+//     int second2 = timeOfStart[0];
+//     int minute2 = timeOfStart[1];
+//     int hour2 = timeOfStart[2];
+//
+//     if(second2 > second1) {
+//       minute1--;
+//       second1 += 60;
+//     }
+//
+//    systemTime[0] = second1 - second2;
+//
+//    if(minute2 > minute1) {
+//       hour1--;
+//       minute1 += 60;
+//    }
+//    systemTime[1] = minute1 - minute2;
+//    systemTime[2] = hour1 - hour2;
+// }
+
+/*
+ * Calculate amount of time between alarms being triggered
+ */
+bool checkAlarm(int hour1, int min1, int sec1, int hour2, int min2, int sec2){
+	int diff_hour, diff_min, diff_sec;
+
+  if(sec2 > sec1) {
+      min1--;
+      sec1 += 60;
+   }
+
+   diff_sec = sec1 - sec2;
+
+   if(min2 > min1) {
+      hour1--;
+      min1 += 60;
+   }
+
+   diff_min = min1 - min2;
+   diff_hour = hour1 - hour2;
+
+   if ((diff_hour >= 0) && (diff_sec >= 20) && (diff_min >= 0)) { //3 minutes have passed
+		 return true;
+   }
+   else {
+		 return false;
+   }
+}
+
+/*
+ * Displays headings
+ */
+void printHeading(void){
+	printf("--------------------------------------------------------------------------------------------------\n");
+	printf("|   RTC Time   |   Sys Timer   |   Humidity (V)|   Temp (C) |  Light  |   DAC Out (V)|   Alarm   |\n");
+	printf("--------------------------------------------------------------------------------------------------\n");
 }
 
 /*

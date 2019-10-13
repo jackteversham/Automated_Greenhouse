@@ -37,8 +37,8 @@ void initGPIO(void){
 	wiringPiSetup(); //This is the default mode. If you want to change pinouts, be aware
 
 	RTC = wiringPiI2CSetup(RTCAddr); //Set up the RTC
-	wiringPiSPISetup(SPI_CHAN1, 500000); //setup the SPI
-	mcp3004Setup(BASE, SPI_CHAN1); //setup mcp3004 library
+	wiringPiSPISetup(SPI_CHAN, SPI_CLOCKSPEED); //setup the SPI
+	mcp3004Setup(BASE, SPI_CHAN); //setup mcp3004 library
 
 	//Set up the LEDS
 	for(unsigned int i; i < sizeof(LEDS)/sizeof(LEDS[0]); i++){
@@ -155,22 +155,19 @@ void monitoring(void){
 		digitalWrite(START_LED, LOW);
 
 		monitorConditions = !monitorConditions;
-
 	}
 	lastInterruptTime = interruptTime;
 }
-
 /*
  * The main function
  * This function is called, and calls all relevant functions we've written
  */
 int main(void){
-  signal(SIGINT, cleanup);
 
+  signal(SIGINT, cleanup);
 	initGPIO();
 	//set the RTC registers with the current system time
 	setCurrentTime();
-
 	// Initialize thread with parameters
   // Set the main thread to have a priority of 99
   pthread_attr_t tattr;
@@ -238,15 +235,18 @@ void *monitorThread(void *threadargs){
 
 			int light = analogRead(BASE+2); //light from LDR on channel 2
 
-			//float dacOutput = (light / 1024.0) * humidity;
-			float dacOutput = 2.4;
+			float dacOutput = (light / 1024.0) * humidity;
 
 			if(dacOutput < 0.65 || dacOutput > 2.65){
 				long currentAlarmTime = millis();
 
-				if((currentAlarmTime - previousAlarmTime>3000) && !dismissedAlarm){
+				if((currentAlarmTime - previousAlarmTime>3000) || !dismissedAlarm){
 					secPWM(dacOutput);
 					printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, "*");
+				}
+				else {
+					secPWM(0);
+					printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, " ");
 				}
 			}
 			else{
@@ -295,7 +295,6 @@ void secPWM(int units){
 	softPwmCreate(ALARM_LED, 0, 1023);
 	softPwmWrite(ALARM_LED, units);
 }
-
 /*
  * hexCompensation
  * This function may not be necessary if you use bit-shifting rather than decimal checking for writing out time values
@@ -348,30 +347,6 @@ int decCompensation(int units){
 		units = 0x10 + unitsU;
 	}
 	return units;
-}
-
-//This interrupt will fetch current time from another script and write it to the clock registers
-//This functions will toggle a flag that is checked in main
-void toggleTime(void){
-	long interruptTime = millis();
-
-	if (interruptTime - lastInterruptTime>bounce){
-		HH = getHours();
-		MM = getMins();
-		SS = getSecs();
-
-		HH = hFormat(HH);
-		HH = decCompensation(HH);
-		wiringPiI2CWriteReg8(RTC, HOUR, HH);
-
-		MM = decCompensation(MM);
-		wiringPiI2CWriteReg8(RTC, MIN, MM);
-
-		SS = decCompensation(SS);
-		wiringPiI2CWriteReg8(RTC, SEC, SS);
-
-	}
-	lastInterruptTime = interruptTime;
 }
 
 /*

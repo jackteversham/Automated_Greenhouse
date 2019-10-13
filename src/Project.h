@@ -37,10 +37,9 @@ const char HOUR = 0x02;
 const char TIMEZONE = 2; // +02H00 (RSA)
 
 //define SPI parameters
-const int SPI_CHAN1 = 0; //wiringPi 10, BCM 8, physical 24  CE0 ADC
-const int SPI_CHAN2 = 1; //wiringPi 11, BCM 7, physical 26 CE1 DAC
+const int SPI_CHAN = 0; //wiringPi 10, BCM 8, physical 24  CE0 ADC
 const int BASE = 100; //chip base pin
-const int SPI_CLOCKSPEED = 1350000;
+const int SPI_CLOCKSPEED = 409600;
 
 //Define buttons
 const int RESET = 25; //wiringPi 25 AND BCM 26

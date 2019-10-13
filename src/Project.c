@@ -16,6 +16,9 @@ long lastInterruptTime = 0; //Used for button debounce
 int RTC; 										//Holds the RTC instance
 int HH,MM,SS;
 
+int increment = 1000; //Default of 1 second
+int choice = 0;
+
 void initGPIO(void){
 	/*
 	 * Sets GPIO using wiringPi pins. see pinout.xyz for specific wiringPi pins
@@ -26,6 +29,8 @@ void initGPIO(void){
 	wiringPiSetup(); //This is the default mode. If you want to change pinouts, be aware
 
 	RTC = wiringPiI2CSetup(RTCAddr); //Set up the RTC
+	wiringPiSPISetup(SPI_CHAN1, 500000); //setup the SPI
+	mcp3004Setup(BASE, SPI_CHAN1); //setup mcp3004 library
 
 	//Set up the LEDS
 	for(unsigned int i; i < sizeof(LEDS)/sizeof(LEDS[0]); i++){
@@ -51,6 +56,11 @@ void initGPIO(void){
 
 	printf("BTNS Done\n");
 	printf("Setup Done\n");
+
+	printf("----------------------------------------------------------------------------------------------\n");
+	printf("|   RTC Time   |   Sys Timer   |   Humidity   |   Temp   |  Light  |   DAC out   |   Alarm   |\n");
+	printf("----------------------------------------------------------------------------------------------\n");
+
 }
 
 /*
@@ -82,6 +92,19 @@ void changeFrequency(void){
 		digitalWrite(FREQUENCY_LED, HIGH);
 		delay(1000);
 		digitalWrite(FREQUENCY_LED, LOW);
+
+		switch(choice) {
+	    case 0:
+				increment = 1000;
+				break;
+	    case 1:
+				increment = 2000;
+				break;
+	    case 2:
+				increment = 5000;
+				break;
+		}
+		choice = (choice + 1) % 3;
 
 	}
 	lastInterruptTime = interruptTime;
@@ -139,6 +162,19 @@ for (;;){
 		MM = wiringPiI2CReadReg8(RTC, MIN); //read MIN register from RTC
 		SS = (wiringPiI2CReadReg8(RTC, SEC) & 0b01111111); //read the SEC register from RTC
 
+	  int temperatureReading = analogRead(BASE+0); //temp on channel zero
+		int humidityReading = analogRead(BASE+1); //humidity from pot on channel 1
+
+		float humidity = (humidityReading*3.3)/1024.0;
+
+
+		float volts = (temperatureReading*3.3)/1024.0;
+		float temperatureInCelsius = (volts - (500.0 / 1000.0)) / (10.0 / 1000.0);
+
+		printf("The temperature is: %f\n", volts);
+		printf("The humidity is: %f\n", humidity);
+
+
 		secPWM(SS);
 
 		// Print out the time we have stored on our RTC
@@ -150,46 +186,6 @@ for (;;){
 	return 0;
 }
 
-/*
- * myAnalogRead:
- * Return the analog value of the given pin
- *
- */
-// static int myAnalogRead(struct wiringPiNodeStruct *node, int pin)
-// {
-//   unsigned char spiData [3] ;
-//   unsigned char chanBits ;
-//   int chan = pin - node->pinBase ;
-//
-//   chanBits = 0b10000000 | (chan << 4) ;
-//
-//   spiData [0] = 1 ;		// Start bit
-//   spiData [1] = chanBits ;
-//   spiData [2] = 0 ;
-//
-//   wiringPiSPIDataRW (node->fd, spiData, 3) ;
-//
-//   return ((spiData [1] << 8) | spiData [2]) & 0x3FF ;
-// }
-
-/*
- * mcp3004Setup:
- * Create a new wiringPi device node for an mcp3004 on the Pi's SPI interface.
- */
-// int mcp3004Setup(const int pinBase, int spiChannel)
-// {
-//   struct wiringPiNodeStruct *node ;
-//
-//   if (wiringPiSPISetup (spiChannel, 1000000) < 0)
-//     return FALSE ;
-//
-//   node = wiringPiNewNode (pinBase, 8) ;
-//
-//   node->fd         = spiChannel ;
-//   node->analogRead = myAnalogRead ;
-//
-//   return TRUE ;
-// }
 
 /*
  * Change the hour format to 12 hours
@@ -207,10 +203,9 @@ int hFormat(int hours){
 
 /*
  * PWM on the ALARM LED
- * The LED should have 60 brightness levels
- * The LED should be "off" at 0 seconds, and fully bright at 59 seconds
  */
 void secPWM(int units){
+	//softPwmCreate(SECS, 0, 1023);
 	softPwmWrite(ALARM_LED, units);
 }
 

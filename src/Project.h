@@ -10,6 +10,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <signal.h>
+#include <string.h>
 #include <mcp3004.h>
 
 //Function definitions
@@ -18,9 +19,10 @@ void reset(void);
 void changeFrequency(void);
 void dismissAlarm(void);
 void monitoring(void);
-// static int myAnalogRead(struct wiringPiNodeStruct *node, int pin);
-// int mcp3004Setup(const int pinBase, int spiChannel);
+//main
+void *monitorThread(void *threadargs);
 int hFormat(int hours);
+int mFormat(int mins);
 void secPWM(int units);
 int hexCompensation(int units);
 int decCompensation(int units);

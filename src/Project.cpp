@@ -5,10 +5,10 @@
 #include <stdlib.h>  //For system functions
 #include <signal.h>  //For cleanup fucntion
 #include <softPwm.h> //For PWM on seconds LED
-#include <string.h>
+#include <string>
 
 #include "Project.h"
-#include "CurrentTime.h"
+#include "CurrentTime.c"
 #include "mcp3004.h"
 
 using namespace std;
@@ -17,7 +17,7 @@ using namespace std;
 int bounce = 200; 					//Minimal interrpt interval (ms)
 long lastInterruptTime = 0; //Used for button debounce
 int RTC; 										//Holds the RTC instance
-int HH,MM,SS;
+//int HH, MM, SS;
 int hours, mins, secs;
 int increment = 1000; //Default of 1 second
 int choice = 0;
@@ -60,9 +60,9 @@ void initGPIO(void){
 	printf("BTNS Done\n");
 	printf("Setup Done\n");
 
-	printf("----------------------------------------------------------------------------------------------\n");
-	printf("|   RTC Time   |   Sys Timer   |   Humidity   |   Temp   |  Light  |   DAC out   |   Alarm   |\n");
-	printf("----------------------------------------------------------------------------------------------\n");
+	printf("--------------------------------------------------------------------------------------------------\n");
+	printf("|   RTC Time   |   Sys Timer   |   Humidity (V)|   Temp (C) |  Light  |   DAC Out (V)|   Alarm   |\n");
+	printf("--------------------------------------------------------------------------------------------------\n");
 
 }
 
@@ -78,6 +78,10 @@ void reset(void){
 		digitalWrite(RESET_LED, HIGH);
 		delay(1000);
 		digitalWrite(RESET_LED, LOW);
+
+		wiringPiI2CWriteReg8(RTC, HOUR, 0x0);
+    wiringPiI2CWriteReg8(RTC, MIN, 0x0);
+    wiringPiI2CWriteReg8(RTC, SEC, 0b10000000);
 
 	}
 	lastInterruptTime = interruptTime;
@@ -220,16 +224,17 @@ void *monitorThread(void *threadargs){
 			int temperatureReading = analogRead(BASE+0); //temp on channel zero
 			float temperatureVolts = (temperatureReading*3.3)/1024.0;
 			float temperatureInCelsius = (temperatureVolts - (500.0 / 1000.0)) / (10.0 / 1000.0);
-			printf("The temperature is: %f\n", temperatureVolts);
+			//printf("The temperature is: %f\n", temperatureVolts);
 
 			int humidityReading = analogRead(BASE+1); //humidity from pot on channel 1
 			float humidity = (humidityReading*3.3)/1024.0;
-			printf("The humidity is: %f\n", humidity);
+			//printf("The humidity is: %f\n", humidity);
 
 			int light = analogRead(BASE+2); //light from LDR on channel 2
 			float dacOut =0;
 
-			printf("%-10s%-10s%-10.2f%-10.2f%-10d%-10.2f%-10s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOut, " ");
+			printf("    %-17s%-17s%-14.2f%-10.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOut, " ");
+			//printf("--------------------------------------------------------------------------------------------------\n");
 
 			delay(increment);
 

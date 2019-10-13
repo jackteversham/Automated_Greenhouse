@@ -17,10 +17,12 @@ using namespace std;
 int bounce = 200; 					//Minimal interrpt interval (ms)
 long lastInterruptTime = 0; //Used for button debounce
 int RTC; 										//Holds the RTC instance
-//int HH, MM, SS;
 int hours, mins, secs;
+
 int increment = 1000; //Default of 1 second
 int choice = 0;
+
+bool monitoring = true;
 
 void initGPIO(void){
 	/*
@@ -147,6 +149,8 @@ void monitoring(void){
 		delay(1000);
 		digitalWrite(START_LED, LOW);
 
+		monitoring = !monitoring;
+
 	}
 	lastInterruptTime = interruptTime;
 }
@@ -198,6 +202,8 @@ int main(void){
 void *monitorThread(void *threadargs){
     for(;;){
 
+			while (!monitoring) continue;
+
 			//Fetch the time from the RTC
 			HH = wiringPiI2CReadReg8(RTC, HOUR); //read SEC register from RTC
 			MM = wiringPiI2CReadReg8(RTC, MIN); //read MIN register from RTC
@@ -223,7 +229,7 @@ void *monitorThread(void *threadargs){
 			//Reading from ADC
 			int temperatureReading = analogRead(BASE+0); //temp on channel zero
 			float temperatureVolts = (temperatureReading*3.3)/1024.0;
-			float temperatureInCelsius = (temperatureVolts - (500.0 / 1000.0)) / (10.0 / 1000.0);
+			float temperatureInCelsius = (temperatureVolts - (550.0 / 1000.0)) / (10.0 / 1000.0);
 			//printf("The temperature is: %f\n", temperatureVolts);
 
 			int humidityReading = analogRead(BASE+1); //humidity from pot on channel 1
@@ -231,9 +237,9 @@ void *monitorThread(void *threadargs){
 			//printf("The humidity is: %f\n", humidity);
 
 			int light = analogRead(BASE+2); //light from LDR on channel 2
-			float dacOut =0;
+			float dacOutput = (light / 1024.0) * humidity;
 
-			printf("    %-17s%-17s%-14.2f%-10.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOut, " ");
+			printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, "*");
 			//printf("--------------------------------------------------------------------------------------------------\n");
 
 			delay(increment);
@@ -241,7 +247,6 @@ void *monitorThread(void *threadargs){
 		}
     pthread_exit(NULL);
 }
-
 
 /*
  * Change the hour format to 12 hours

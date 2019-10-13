@@ -22,7 +22,10 @@ int hours, mins, secs;
 int increment = 1000; //Default of 1 second
 int choice = 0;
 
-bool monitoring = true;
+bool monitorConditions = true;
+bool dismissedAlarm = false;
+
+long previousAlarmTime = millis(); //time that the previous alarm is sounded
 
 void initGPIO(void){
 	/*
@@ -132,6 +135,8 @@ void dismissAlarm(void){
 		delay(1000);
 		digitalWrite(ALARM_DISMISS_LED, LOW);
 
+		dismissedAlarm = !dismissedAlarm;
+
 	}
 	lastInterruptTime = interruptTime;
 }
@@ -149,7 +154,7 @@ void monitoring(void){
 		delay(1000);
 		digitalWrite(START_LED, LOW);
 
-		monitoring = !monitoring;
+		monitorConditions = !monitorConditions;
 
 	}
 	lastInterruptTime = interruptTime;
@@ -167,7 +172,7 @@ int main(void){
 	setCurrentTime();
 
 	// Initialize thread with parameters
-  // Set the play thread to have a 99 priority
+  // Set the main thread to have a priority of 99
   pthread_attr_t tattr;
   pthread_t thread_id;
   int priorty = 99;
@@ -183,13 +188,8 @@ int main(void){
 	wiringPiI2CWriteReg8(RTC, MIN, 0x0);
 	wiringPiI2CWriteReg8(RTC, SEC, 0b10000000);
 
-	secPWM(SS);
-
 	// Print out the time we have stored on our RTC
 	//printf("The current time is: %d:%d:%d\n", hexCompensation(HH), hexCompensation(MM), hexCompensation(SS));
-
-	//Using a delay to make our program less CPU 'hungry'
-
 
 	pthread_join(thread_id, NULL);
   pthread_exit(NULL);
@@ -202,7 +202,7 @@ int main(void){
 void *monitorThread(void *threadargs){
     for(;;){
 
-			while (!monitoring) continue;
+			while (!monitorConditions) continue;
 
 			//Fetch the time from the RTC
 			HH = wiringPiI2CReadReg8(RTC, HOUR); //read SEC register from RTC
@@ -237,9 +237,22 @@ void *monitorThread(void *threadargs){
 			//printf("The humidity is: %f\n", humidity);
 
 			int light = analogRead(BASE+2); //light from LDR on channel 2
-			float dacOutput = (light / 1024.0) * humidity;
 
-			printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, "*");
+			//float dacOutput = (light / 1024.0) * humidity;
+			float dacOutput = 2.4;
+
+			if(dacOutput < 0.65 || dacOutput > 2.65){
+				long currentAlarmTime = millis();
+
+				if((currentAlarmTime - previousAlarmTime>3000) && !dismissedAlarm){
+					secPWM(dacOutput);
+					printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, "*");
+				}
+			}
+			else{
+				secPWM(0);
+				printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, " ");
+			}
 			//printf("--------------------------------------------------------------------------------------------------\n");
 
 			delay(increment);
@@ -279,7 +292,7 @@ int mFormat(int mins){
  * PWM on the ALARM LED
  */
 void secPWM(int units){
-	//softPwmCreate(SECS, 0, 1023);
+	softPwmCreate(ALARM_LED, 0, 1023);
 	softPwmWrite(ALARM_LED, units);
 }
 

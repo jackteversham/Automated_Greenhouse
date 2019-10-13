@@ -10,7 +10,6 @@
 #include <math.h>
 #include <pthread.h>
 #include <signal.h>
-#include <string.h>
 #include <mcp3004.h>
 
 //Function definitions

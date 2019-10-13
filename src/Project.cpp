@@ -22,7 +22,8 @@ int hours, mins, secs;
 int increment = 1000; //Default of 1 second
 int choice = 0;
 
-bool dismissedAlarm = false;
+bool alarmActive = false;
+bool alarmEnabled = true;
 bool monitorConditions = true;
 
 int prevAlarmHour = 0;
@@ -137,7 +138,7 @@ void dismissAlarm(void){
 		delay(1000);
 		digitalWrite(ALARM_DISMISS_LED, LOW);
 
-		dismissedAlarm = !dismissedAlarm;
+		alarmActive = false;
 
 	}
 	lastInterruptTime = interruptTime;
@@ -237,18 +238,22 @@ void *monitorThread(void *threadargs){
 
 			float dacOutput = (light / 1024.0) * humidity;
 
+			checkAlarm(hours, mins, secs, prevAlarmHour, prevAlarmMin, prevAlarmSec);
 
-			if(checkAlarm(hours, mins, secs, prevAlarmHour, prevAlarmMin, prevAlarmSec)){
+			if((dacOutput < 0.65 || dacOutput > 2.65)){
 
-				if(((dacOutput < 0.65 || dacOutput > 2.65)){
+				if(alarmEnabled){
+					alarmActive = true;
 					prevAlarmHour = hours;
 					prevAlarmMin = mins;
 					prevAlarmSec = secs;
-
-					secPWM(dacOutput);
-					printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, "*");
 				}
 
+			}
+
+			if(alarmActive){
+				secPWM(dacOutput);
+				printf("    %-17s%-17s%-14.2f%-12.2f%-12d%-14.2f%-14s\n", currentTime.c_str(), systemTime.c_str(), humidity, temperatureInCelsius, light, dacOutput, "*");
 			}
 			else{
 				secPWM(0);
@@ -288,7 +293,7 @@ void *monitorThread(void *threadargs){
 /*
  * Calculate amount of time between alarms being triggered
  */
-bool checkAlarm(int hour1, int min1, int sec1, int hour2, int min2, int sec2){
+void checkAlarm(int hour1, int min1, int sec1, int hour2, int min2, int sec2){
 	int diff_hour, diff_min, diff_sec;
 
   if(sec2 > sec1) {
@@ -306,11 +311,11 @@ bool checkAlarm(int hour1, int min1, int sec1, int hour2, int min2, int sec2){
    diff_min = min1 - min2;
    diff_hour = hour1 - hour2;
 
-   if ((diff_hour >= 0) && (diff_sec >= 20) && (diff_min >= 0)) { //3 minutes have passed
-		 return true;
+   if ((diff_hour >= 0) && (diff_sec >= 5) && (diff_min >= 0)) { //3 minutes have passed
+		 alarmEnabled = true;
    }
    else {
-		 return false;
+		 alarmEnabled = false;
    }
 }
 

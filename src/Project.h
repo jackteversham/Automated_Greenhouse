@@ -20,7 +20,7 @@ void dismissAlarm(void);
 void monitoring(void);
 //main
 void *monitorThread(void *threadargs);
-bool checkAlarm(int hour1, int min1, int sec1, int hour2, int min2, int sec2);
+void checkAlarm(int hour1, int min1, int sec1, int hour2, int min2, int sec2);
 void printHeading(void);
 int hFormat(int hours);
 int mFormat(int mins);

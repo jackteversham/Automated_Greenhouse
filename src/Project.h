@@ -30,6 +30,7 @@ int decCompensation(int units);
 void toggleTime(void);
 void cleanup(int);
 void setCurrentTime(void);
+long timeDiff(void);
 
 //Define constants
 const char RTCAddr = 0x6f;

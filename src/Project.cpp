@@ -18,6 +18,7 @@ int bounce = 200; 					//Minimal interrpt interval (ms)
 long lastInterruptTime = 0; //Used for button debounce
 int RTC; 										//Holds the RTC instance
 int hours, mins, secs;
+int ssecs, smins, shours;
 
 int increment = 1000; //Default of 1 second
 int choice = 0;
@@ -25,10 +26,18 @@ int choice = 0;
 bool alarmActive = false;
 bool alarmEnabled = true;
 bool monitorConditions = true;
+bool first = true;
 
 int prevAlarmHour = 0;
 int prevAlarmMin = 0;
 int prevAlarmSec = 0;
+
+volatile long startTimeInMillis, currentTimeInMillis, timediff;
+
+
+long timeDiff(){
+return millis()-startTimeInMillis;
+}
 
 void initGPIO(void){
 	/*
@@ -171,6 +180,9 @@ int main(void){
 	initGPIO();
 	//set the RTC registers with the current system time
 	setCurrentTime();
+
+
+
 	// Initialize thread with parameters
   // Set the main thread to have a priority of 99
   pthread_attr_t tattr;
@@ -191,6 +203,8 @@ int main(void){
 	// Print out the time we have stored on our RTC
 	//printf("The current time is: %d:%d:%d\n", hexCompensation(HH), hexCompensation(MM), hexCompensation(SS));
 
+
+
 	pthread_join(thread_id, NULL);
   pthread_exit(NULL);
 
@@ -199,24 +213,39 @@ int main(void){
 	return 0;
 }
 
+void getSysTime(void){
+
+}
+
 void *monitorThread(void *threadargs){
 
     for(;;){
 
 			while (!monitorConditions) continue;
 
-			//Fetch the time from the RTC
-			HH = wiringPiI2CReadReg8(RTC, HOUR); //read SEC register from RTC
-			MM = wiringPiI2CReadReg8(RTC, MIN); //read MIN register from RTC
-			SS = wiringPiI2CReadReg8(RTC, SEC); //read the SEC register from RTC
+			// //Fetch the time from the RTC
+			// HH = wiringPiI2CReadReg8(RTC, HOUR); //read SEC register from RTC
+			// MM = wiringPiI2CReadReg8(RTC, MIN); //read MIN register from RTC
+			// SS = wiringPiI2CReadReg8(RTC, SEC); //read the SEC register from RTC
+			//
+			 hours = getHours();
+			 mins = getMins();
+			 secs = getSecs();
+       if(first){
+				  startTimeInMillis = millis();
+					first = false;
+			 }
 
-			hours = hexCompensation(HH);
-			mins = hexCompensation(MM);
-			secs = hexCompensation(SS & 0b01111111);
+		 timediff = millis() - startTimeInMillis;
+		 shours = (timediff/1000*60*60)%60;
+		 smins = (timediff/1000*60)%60;
+		 ssecs = (timediff/1000)%60;
 
-      string systemHour = to_string(hours);
-      string systemMin = to_string(mins);
-			string systemSec = to_string(secs);
+
+
+      string systemHour = to_string(decCompensation(shours));
+      string systemMin = to_string(decCompensation(smins));
+			string systemSec = to_string(decCompensation(ssecs));
       string systemTime = string(systemHour + ":" + systemMin + ":" + systemSec);
 
 			string currentHour = to_string(getHours());
@@ -227,7 +256,8 @@ void *monitorThread(void *threadargs){
 			//Reading from ADC
 			int temperatureReading = analogRead(BASE+0); //temp on channel zero
 			float temperatureVolts = (temperatureReading*3.3)/1024.0;
-			float temperatureInCelsius = (temperatureVolts - (550.0 / 1000.0)) / (10.0 / 1000.0);
+			//float temperatureInCelsius = (temperatureVolts - (550.0 / 1000.0)) / (10.0 / 1000.0);
+			float temperatureInCelsius = 25.5;
 			//printf("The temperature is: %f\n", temperatureVolts);
 
 			int humidityReading = analogRead(BASE+1); //humidity from pot on channel 1
@@ -311,7 +341,7 @@ void checkAlarm(int hour1, int min1, int sec1, int hour2, int min2, int sec2){
    diff_min = min1 - min2;
    diff_hour = hour1 - hour2;
 
-   if ((diff_hour >= 0) && (diff_sec >= 5) && (diff_min >= 0)) { //3 minutes have passed
+   if ((diff_hour >= 0) && (diff_sec >= 0) && (diff_min >= 3)) { //3 minutes have passed
 		 alarmEnabled = true;
    }
    else {

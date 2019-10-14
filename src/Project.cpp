@@ -223,25 +223,19 @@ void *monitorThread(void *threadargs){
 
 			while (!monitorConditions) continue;
 
-			// //Fetch the time from the RTC
-			// HH = wiringPiI2CReadReg8(RTC, HOUR); //read SEC register from RTC
-			// MM = wiringPiI2CReadReg8(RTC, MIN); //read MIN register from RTC
-			// SS = wiringPiI2CReadReg8(RTC, SEC); //read the SEC register from RTC
-			//
 			 hours = getHours();
 			 mins = getMins();
 			 secs = getSecs();
+
        if(first){
 				  startTimeInMillis = millis();
 					first = false;
 			 }
 
-		 timediff = millis() - startTimeInMillis;
-		 shours = (timediff/1000*60*60)%60;
-		 smins = (timediff/1000*60)%60;
-		 ssecs = (timediff/1000)%60;
-
-
+			 timediff = millis() - startTimeInMillis;
+			 shours = (timediff/1000*60*60)%60;
+			 smins = (timediff/1000*60)%60;
+			 ssecs = (timediff/1000)%60;
 
       string systemHour = to_string(decCompensation(shours));
       string systemMin = to_string(decCompensation(smins));
@@ -256,8 +250,7 @@ void *monitorThread(void *threadargs){
 			//Reading from ADC
 			int temperatureReading = analogRead(BASE+0); //temp on channel zero
 			float temperatureVolts = (temperatureReading*3.3)/1024.0;
-			//float temperatureInCelsius = (temperatureVolts - (550.0 / 1000.0)) / (10.0 / 1000.0);
-			float temperatureInCelsius = 25.5;
+			float temperatureInCelsius = (temperatureVolts - (550.0 / 1000.0)) / (10.0 / 1000.0);
 			//printf("The temperature is: %f\n", temperatureVolts);
 
 			int humidityReading = analogRead(BASE+1); //humidity from pot on channel 1

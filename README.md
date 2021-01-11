@@ -6,4 +6,4 @@ All the recorded information should be easily accessible using Blynk. Blynk is a
 
 Interfacing with the Raspberry Pi required the use of multiple libraries. The WiringPi library was used to streamline the use of the Pi’s on-board I2C interface. The mcp3004 library was used to interface with the MCP3008 ADC chip using a serial SPI connection.
 
-![alt text](https://github.com/jackteversham/Automated_Greenhouse/workflow.png?raw=false)
+![alt text](<workflow.png>)
